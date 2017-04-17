@@ -4,7 +4,8 @@ import java.io.*;
 import java.util.*;
 
 /**
- * Created by idejesus on 15/04/2017.
+ * Use RandomAccessFile so that everytime a player moves to a new locations a new location is loaded on to the
+ * application without having to load all the locations on runtime
  */
 public class Locations implements Map<Integer, Location> {
 
@@ -14,20 +15,47 @@ public class Locations implements Map<Integer, Location> {
 
     public static void main(String[] args) throws IOException {
 
+        //Set mode to read and write
         try(RandomAccessFile rao = new RandomAccessFile("locations_rand.dat", "rwd")){
+
+            // 1, First four bytes will contain number of locations
+            // 2. The next four bytes will contain the start offset of the locations section
+            // 3. The next section of the file will contain the index of the locations
+            // 4. The last section contain the location records
+
+            // A file pointer is an offset in the file where the next read/write will start form
+            // If the file pointer starts a byte position 100 then the next read/write will start at byte position 100
+            // The file pointer is advanced by the number of bytes we read
+
+            //Write the number of locations at byte position 0
+            //The file pointer is advanced after each write
             rao.writeInt(locations.size());
+
+            //Calculate the length of the index. Each index record will contain 3 integers
+            //To get length of each integer we have to multiply by Integer.BYTES
             int indexSize = locations.size() * 3 * Integer.BYTES;
-            int locationStart = (int) (indexSize * rao.getFilePointer() + Integer.BYTES);
+
+            //Calculate the offset of the location  by calculating the current position of the file pointer
+            //to the index size to account the value already written on the file
+            //and also account the number of bytes of the integer to be written
+            int locationStart = (int) (indexSize + rao.getFilePointer() + Integer.BYTES);
+
             rao.writeInt(locationStart);
 
+            //store the location where writing the index will start
             long indexStart = rao.getFilePointer();
 
+            // Skip to the section to write the locations first because each index record requires the offset of the
+            //location
             int startPointer = locationStart;
             rao.seek(startPointer);
 
             for(Location location : locations.values()){
                 rao.writeInt(location.getLocationID());
                 rao.writeUTF(location.getDescription());
+
+                //Create a string for the exits using StringBuilder
+                //example output : W,1,S,2
                 StringBuilder builder = new StringBuilder();
                 for (String direction : location.getExits().keySet()){
                     if(!direction.equalsIgnoreCase("Q")){
@@ -39,11 +67,18 @@ public class Locations implements Map<Integer, Location> {
                 }
                 rao.writeUTF(builder.toString());
 
+
+
+                //Create a new index record and store it in the index LinkedHashmap
+                //startPointer == offset of the record
+                //rao.getFilePointer - startPointer == length of the record
                 IndexRecord record = new IndexRecord(startPointer, (int) (rao.getFilePointer() - startPointer));
                 index.put(location.getLocationID(), record);
 
                 startPointer = (int) rao.getFilePointer();
             }
+
+            //return to the start of the section of the index
             rao.seek(indexStart);
             for(Integer locationID : index.keySet()){
                 rao.writeInt(locationID);
@@ -54,28 +89,7 @@ public class Locations implements Map<Integer, Location> {
         }
 
 
-//        try (ObjectOutputStream locFile = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream("locations.dat")))) {
-//            for(Location location : locations.values()) {
-//                locFile.writeObject(location);
-//            }
-//        }
 
-//        try (DataOutputStream locFile = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("locations.dat")))) {
-//            for (Location location : locations.values()) {
-//                locFile.writeInt(location.getLocationID());
-//                locFile.writeUTF(location.getDescrcom/company/Locations.java:22iption());
-//                System.out.println("Writing location " + location.getLocationID() + " : " + location.getDescription());
-//                System.out.println("Writing " + (location.getExits().size() - 1) + " exits.");
-//                locFile.writeInt(location.getExits().size() - 1);
-//                for (String direction : location.getExits().keySet()) {
-//                    if (!direction.equalsIgnoreCase("Q")) {
-//                        System.out.println("\t\t" + direction + "," + location.getExits().get(direction));
-//                        locFile.writeUTF(direction);
-//                        locFile.writeInt(location.getExits().get(direction));
-//                    }
-//                }
-//            }
-//        }
 
     }
    
@@ -83,11 +97,17 @@ public class Locations implements Map<Integer, Location> {
     static {
 
         try{
-            ra = new RandomAccessFile("locations_rand.dat", "rwd");
-            int numLocations =ra.readInt();
-            long locationStartPOint = ra.readInt();
 
-            while(ra.getFilePointer() < locationStartPOint){
+            //Only populate the index hashmap. locations hashmap is not populated
+            ra = new RandomAccessFile("locations_rand.dat", "rwd");
+
+            //Remember that 1st section is the size of the of the locations map
+            //2nd section is the locations' offset
+            //3rd section is the records itself
+            int numLocations =ra.readInt();
+            long locationStartPoint = ra.readInt();
+
+            while(ra.getFilePointer() < locationStartPoint){
                 int locationId = ra.readInt();
                 int locationStart = ra.readInt();
                 int locationLength = ra.readInt();
