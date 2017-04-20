@@ -16,7 +16,7 @@ public class Locations implements Map<Integer, Location> {
     public static void main(String[] args) throws IOException {
 
         //Set mode to read and write
-        try(RandomAccessFile rao = new RandomAccessFile("locations_rand.dat", "rwd")){
+        try (RandomAccessFile rao = new RandomAccessFile("locations_rand.dat", "rwd")) {
 
             // 1, First four bytes will contain number of locations
             // 2. The next four bytes will contain the start offset of the locations section
@@ -45,20 +45,26 @@ public class Locations implements Map<Integer, Location> {
             //store the location where writing the index will start
             long indexStart = rao.getFilePointer();
 
+            // 140 1000 * index 1 .. index 2 .. index3 .. *location1 ... location 2...
+            // 0 >>>>>>>> 1000byte then start writing locations here
             // Skip to the section to write the locations first because each index record requires the offset of the
             //location
             int startPointer = locationStart;
             rao.seek(startPointer);
 
-            for(Location location : locations.values()){
+            for (Location location : locations.values()) {
+                // 1 im at work w,1,s,2
+                // 1000 >> 1100
+                // 2 im at home q,0,s,3
+                // 1100 >> 1150
                 rao.writeInt(location.getLocationID());
                 rao.writeUTF(location.getDescription());
 
                 //Create a string for the exits using StringBuilder
                 //example output : W,1,S,2
                 StringBuilder builder = new StringBuilder();
-                for (String direction : location.getExits().keySet()){
-                    if(!direction.equalsIgnoreCase("Q")){
+                for (String direction : location.getExits().keySet()) {
+                    if (!direction.equalsIgnoreCase("Q")) {
                         builder.append(direction);
                         builder.append(",");
                         builder.append(location.getExits().get(direction));
@@ -66,7 +72,6 @@ public class Locations implements Map<Integer, Location> {
                     }
                 }
                 rao.writeUTF(builder.toString());
-
 
 
                 //Create a new index record and store it in the index LinkedHashmap
@@ -79,8 +84,9 @@ public class Locations implements Map<Integer, Location> {
             }
 
             //return to the start of the section of the index
+            // 1 1001 1100 2 1100 1150
             rao.seek(indexStart);
-            for(Integer locationID : index.keySet()){
+            for (Integer locationID : index.keySet()) {
                 rao.writeInt(locationID);
                 rao.writeInt(index.get(locationID).getStartByte());
                 rao.writeInt(index.get(locationID).getLength());
@@ -89,31 +95,30 @@ public class Locations implements Map<Integer, Location> {
         }
 
 
-
-
     }
-   
+
 
     static {
 
-        try{
+        try {
 
             //Only populate the index hashmap. locations hashmap is not populated
             ra = new RandomAccessFile("locations_rand.dat", "rwd");
 
             //Remember that 1st section is the size of the of the locations map
             //2nd section is the locations' offset
-            //3rd section is the records itself
-            int numLocations =ra.readInt();
+            //3rd section is the indexes itself
+            // 4th section is the  locations themselves
+            int numLocations = ra.readInt();
             long locationStartPoint = ra.readInt();
 
-            while(ra.getFilePointer() < locationStartPoint){
+            while (ra.getFilePointer() < locationStartPoint) {
                 int locationId = ra.readInt();
                 int locationStart = ra.readInt();
                 int locationLength = ra.readInt();
 
                 IndexRecord record = new IndexRecord(locationStart, locationLength);
-                index.put(locationId,record);
+                index.put(locationId, record);
             }
 
 
@@ -122,6 +127,7 @@ public class Locations implements Map<Integer, Location> {
         } catch (IOException e) {
             e.printStackTrace();
         }
+
 
 //        try(ObjectInputStream locFile = new ObjectInputStream(new BufferedInputStream(new FileInputStream("locations.dat")))){
 //            boolean eof =false;
@@ -167,6 +173,33 @@ public class Locations implements Map<Integer, Location> {
 //        } catch(IOException io) {
 //            System.out.println("IO Exception");
 //        }
+    }
+
+    public Location getLocation(int locationId) throws IOException {
+        IndexRecord record = index.get(locationId);
+        ra.seek(record.getStartByte());
+
+        // 1 im at work Q,1,S,2 2 im at hoME S,1
+        int id = ra.readInt();
+        String description = ra.readUTF();
+        String exits = ra.readUTF();
+        String[] exitPart = exits.split(",");
+
+        Location location = new Location(locationId, description, null);
+
+        if (locationId != 0) {
+            //Q,1,S,2
+            for (int i = 0; i < exitPart.length; i++) {
+                System.out.println("exitPart = " + exitPart[i]);
+                System.out.println("exitPart[+1] = " + exitPart[i + 1]);
+                String direction = exitPart[i];
+                int destination = Integer.parseInt(exitPart[++i]);
+                location.addExit(direction, destination);
+            }
+        }
+
+        return location;
+
     }
 
     public void initialize() throws Exception {

@@ -2,6 +2,9 @@ package com.company;
 
 
 public class IndexRecord {
+    //key locationid 1
+    //index 1 1001 100
+    //location 1 located at byte 1001 and has a length of 100
     private int startByte;
     private int length;
 
